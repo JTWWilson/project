@@ -1,6 +1,20 @@
 import pyshark
 import typing
 from typing_extensions import Literal
+import mysql.connector
+from dotenv import dotenv_values
+
+config = dotenv_values(".env")
+
+db = mysql.connector.connect(
+  host="fyp-db.cytclda6g1lu.eu-west-2.rds.amazonaws.com",
+  user=config['db_username'],
+  password=config['db_password']
+)
+
+cursor = db.cursor()
+cursor.execute("select version()")
+print(cursor.fetchone())
 
 # Convert to iterable for efficiency
 pcap = pyshark.FileCapture('firstRead.pcap')
@@ -90,4 +104,4 @@ def list_ips_by_mac(
     return ret
 
 
-print(get_all_addresses(pcap, "ETH"))
+# print(get_all_addresses(pcap, "ETH"))
