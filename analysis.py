@@ -4,6 +4,10 @@ from typing_extensions import Literal
 import mysql.connector
 from dotenv import dotenv_values
 import json
+import networkx as nx
+import matplotlib.pyplot as plt
+from pickle import dump, load
+from copy import deepcopy
 
 config = dotenv_values(".env")
 """
@@ -24,8 +28,20 @@ class Device:
     def __init__(self, mac_addr) -> None:
         self.MAC_ADDRESS = mac_addr
         self.ip_addresses = []
-        self.devices_sent_to = []
-        self.devices_received_from = []
+        self.devices_sent_to = {}
+        self.devices_received_from = {}
+
+    def __repr__(self) -> str:
+        return self.MAC_ADDRESS
+
+    def __eq__(self, __o: object) -> bool:
+        try:
+            return self.MAC_ADDRESS == __o.MAC_ADDRESS
+        except AttributeError:
+            return False
+
+    def __hash__(self) -> int:
+        return hash(self.MAC_ADDRESS)
 
 
 class DeviceEncoder(json.JSONEncoder):
@@ -38,10 +54,49 @@ class Network:
         self.devices = devices
 
     @staticmethod
+    def add_to_device_dict(dct, device) -> dict:
+        if device.MAC_ADDRESS in dct.keys():
+            dct[device.MAC_ADDRESS] += 1
+        else:
+            dct[device.MAC_ADDRESS] = 1
+        return dct
+
+    @staticmethod
+    def get_index_by_mac(devices: typing.List[Device], mac: str) -> int:
+            for i, d in enumerate(devices):
+                if d.MAC_ADDRESS == mac:
+                    return i
+            return False
+
+    @staticmethod
+    def get_device_by_mac(devices: typing.List[Device], mac: str):
+            for d in devices:
+                if d.MAC_ADDRESS == mac:
+                    return d
+            return False
+
+    def make_edge_list(self):
+        #[(1,2), (2,3)]
+        edge_list = []
+
+        device: Device
+        for index, device in enumerate(self.devices):
+            out_device: Device
+            for out_device in device.devices_sent_to:                
+                edge_list.append((index, self.get_index_by_mac(self.devices, out_device.MAC_ADDRESS)))
+
+        return edge_list
+
+    def plot_connections(self):
+        graph = nx.DiGraph(self.make_edge_list())
+        nx.draw_networkx(graph)
+        plt.show()
+
+    @staticmethod
     def get_devices_from_pcap(pcap: pyshark.FileCapture):
         """Turns a pcap into a list of Devices"""
         iterable_pcap = iter(pcap)
-        device_list = []
+        device_dict = {}
 
         while True:
             try:
@@ -51,21 +106,32 @@ class Network:
             if has_given_layer(packet, "ETH"):
                 src_mac = packet.layers[0].src
                 dst_mac = packet.layers[0].dst
-                # If source device is new, create Device object and add it to ret
-                if src_mac not in [d.MAC_ADDRESS for d in device_list]:
-                    new_device = Device(src_mac)
-                    if has_given_layer(packet, "IP"):
-                        new_device.ip_addresses.append(packet.layers[1].src)
-                    # If destination device is also new, create Device object and add it to ret
-                    if dst_mac not in [d.MAC_ADDRESS for d in device_list]:                   
-                        other_new_device = Device(dst_mac)
-                        if has_given_layer(packet, "IP"):
-                            other_new_device.ip_addresses.append(packet.layers[1].dst)
-                        new_device.devices_sent_to.append(other_new_device)
-                        other_new_device.devices_sent_to.append(new_device)
-                    device_list.append(new_device)
+                print(device_dict)
+                mac_list = [d.MAC_ADDRESS for d in device_dict.keys()]
+                src = None
+                dst = None
 
-        return device_list
+                if src_mac in mac_list:
+                    src: Device = Network.get_device_by_mac(device_dict.keys(), src_mac)
+                else:
+                    src = Device(src_mac)
+                    if has_given_layer(packet, "IP"):
+                        src.ip_addresses.append(packet.layers[1].src)
+                if dst_mac in mac_list:
+                    dst: Device = Network.get_device_by_mac(device_dict.keys(), dst_mac)
+                else:
+                    dst = Device(dst_mac)
+                    if has_given_layer(packet, "IP"):
+                        dst.ip_addresses.append(packet.layers[1].dst)
+                
+                src.devices_sent_to = Network.add_to_device_dict(src.devices_sent_to, deepcopy(dst))
+                dst.devices_received_from = Network.add_to_device_dict(src.devices_received_from, deepcopy(src))
+                if src_mac in mac_list: 
+                    device_dict = Network.add_to_device_dict(device_dict, deepcopy(src))
+                if dst_mac not in mac_list: 
+                    device_dict = Network.add_to_device_dict(device_dict, deepcopy(dst))
+
+        return device_dict
 
 
 def has_given_layer(
@@ -105,48 +171,19 @@ def get_all_addresses(
     return addresses
 
 
-def list_ips_by_mac(
-    pcap: pyshark.FileCapture, 
-) -> typing.List[Device]:
-    iterable_pcap = iter(pcap)
-
-    ret = []
-
-    i = 0
-    while True: #i < 50:
-        try:
-            packet: pyshark.packet.packet.Packet = next(iterable_pcap) 
-        except StopIteration:
-            break
-        if has_given_layer(packet, "ETH"):
-            # print(packet.layers)
-            src_mac = packet.layers[0].src
-            dst_mac = packet.layers[0].dst
-            # If source device is new, create Device object and add it to ret
-            if src_mac not in [d.MAC_ADDRESS for d in ret]:
-                new_device = Device(src_mac)
-                if has_given_layer(packet, "IP"):
-                    new_device.ip_addresses.append(packet.layers[1].src)
-                # If destination device is also new, create Device object and add it to ret
-                if dst_mac not in [d.MAC_ADDRESS for d in ret]:                   
-                    other_new_device = Device(dst_mac)
-                    if has_given_layer(packet, "IP"):
-                        other_new_device.ip_addresses.append(packet.layers[1].dst)
-                    new_device.devices_sent_to.append(other_new_device)
-                    other_new_device.devices_sent_to.append(new_device)
-                ret.append(new_device)
-        i += 1
-
-    return ret
 
 
-# # d = Device('ab:ac:ac')
-# # d2 = Device('ac:ad:ad')
-# # d.devices_received_from = [d2]
-# # print(DeviceEncoder().encode(d))
-
-#with open('export.json','w') as f:
-#    f.write(json.dumps(list_ips_by_mac(pcap), indent=4, cls=DeviceEncoder))
+with open('export','wb') as f:
+    devices = Network.get_devices_from_pcap(pcap)
+    net = Network(devices)
+    print('Network object constructed.')
+    dump(net, f)
+    print('Network object dumped to file.')
+quit()
+with open('export','rb') as f:
+    net: Network = load(f)
+    print('Network object loaded from file.')
+    net.plot_connections()
 
 
 #print(get_all_addresses(pcap, "ETH"))
