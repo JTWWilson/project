@@ -8,6 +8,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from pickle import dump, load
 from copy import deepcopy
+from numpy import unique
 
 config = dotenv_values(".env")
 """
@@ -171,15 +172,50 @@ def get_all_addresses(
     return addresses
 
 
+def get_edges_from_pcap(pcap: pyshark.FileCapture):
+        """Turns a pcap into a list of edges with widths"""
+        iterable_pcap = iter(pcap)
+        edges = {}
+        all_macs = set()
+
+        while True:
+            try:
+                packet: pyshark.packet.packet.Packet = next(iterable_pcap) 
+            except StopIteration:
+                break
+            if has_given_layer(packet, "ETH"):
+                src_mac = packet.layers[0].src
+                dst_mac = packet.layers[0].dst
+                
+                all_macs.add(src_mac)
+                all_macs.add(dst_mac)
+
+                if (src_mac, dst_mac) in edges.keys():
+                    edges[(src_mac, dst_mac)] += 1
+                else:
+                    edges[(src_mac, dst_mac)] = 1
+        return edges, all_macs
 
 
+def show_edges(edges, all_macs: set):
+    g = nx.DiGraph()
+    sorted_macs = sorted(all_macs)
+    for edge in edges:
+        g.add_edge(sorted_macs.index(edge[0]), sorted_macs.index(edge[1]), weight=edges[edge])
+    nx.draw(g, pos=nx.shell_layout(g))
+    plt.show()
+
+edges, all_macs = get_edges_from_pcap(pcap)
+show_edges(edges, all_macs)
+
+quit()
 with open('export','wb') as f:
     devices = Network.get_devices_from_pcap(pcap)
     net = Network(devices)
     print('Network object constructed.')
     dump(net, f)
     print('Network object dumped to file.')
-quit()
+
 with open('export','rb') as f:
     net: Network = load(f)
     print('Network object loaded from file.')
