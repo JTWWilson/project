@@ -22,7 +22,7 @@ cursor = db.cursor()
 cursor.execute("SHOW DATABASES")
 print(type(cursor.fetchall()))
 """
-pcap = pyshark.FileCapture('firstRead.pcap')
+pcap = pyshark.FileCapture('home.pcap')
 
 
 class Device:
@@ -201,10 +201,15 @@ def show_edges(edges, all_macs: set):
     g = nx.DiGraph()
     sorted_macs = sorted(all_macs)
     for edge in edges:
-        g.add_edge(sorted_macs.index(edge[0]), sorted_macs.index(edge[1]), weight=edges[edge])
-    nx.draw(g, pos=nx.shell_layout(g))
+        g.add_edge(edge[0], edge[1], weight=edges[edge])
+    for mac in sorted_macs:
+        g.add_node(mac)
+    nx.draw(g, pos=nx.shell_layout(g), with_labels=True)
+
     plt.show()
 
+
+print(get_all_addresses(pcap, "IP"))
 edges, all_macs = get_edges_from_pcap(pcap)
 show_edges(edges, all_macs)
 
