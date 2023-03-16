@@ -1,5 +1,7 @@
 import nmap
 import sys
+from socket import gethostbyaddr, herror
+from utils import is_local_ip_address
 
 print(sys.argv)
 
@@ -23,17 +25,24 @@ def probe_ip_address(ip_address: str):
         return ["Scan incomplete", -1]
 
 targets = []
+hosts = []
+for target in targets:
+    try:
+        hosts.append(gethostbyaddr(target))
+    except herror:
+        hosts.append('No host found')
+print(hosts)
 
 print('Local devices:')
-for target in targets:
-    if target.startswith("192.168"):
-        print('Probing: {}'.format(target))
+for index, target in enumerate(targets):
+    if is_local_ip_address(target):
+        print('Probing: {} : {}'.format(hosts[index], target))
         guess = probe_ip_address(target)
         print("{} is running {} with {} accuracy".format(target, guess[0], guess[1]))
 
 print('External devices:')
-for target in targets:
-    if not target.startswith("192.168"):
-        print('Probing: {}'.format(target))
+for index, target in enumerate(targets):
+    if not is_local_ip_address(target):
+        print('Probing: {} : {}'.format(hosts[index], target))
         guess = probe_ip_address(target)
         print("{} is running {} with {} accuracy".format(target, guess[0], guess[1]))
