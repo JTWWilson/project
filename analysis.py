@@ -270,37 +270,39 @@ def show_edges(edges, macs_to_ip):
     g = nx.DiGraph()
     sorted_macs = sorted(macs_to_ip)
     print(sorted_macs)
+    node_labels = []
     for i, mac in enumerate(sorted_macs):
         try:
             name = socket.gethostbyaddr(macs_to_ip[mac])
-            sorted_macs[i] = name
+            node_labels.append(name[0])
         except socket.herror:
-            pass
+            node_labels.append(mac)
     for edge in edges:
         g.add_edge(edge[0], edge[1], weight=edges[edge])
     for mac in sorted_macs:
             g.add_node(mac)
-    nx.draw(g, pos=nx.shell_layout(g), with_labels=True)
-    ##nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=, font_size=10)
+    nx.draw(g, pos=nx.shell_layout(g), with_labels=False)
+    nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_labels, font_size=10)
     plt.show()
 
 
-print(get_all_addresses(pcap, "IP"))
-edges, macs_to_ip = get_edges_from_pcap(pcap)
-show_edges(edges, macs_to_ip)
+if __name__ == '__main__':
+    print(get_all_addresses(pcap, "IP"))
+    edges, macs_to_ip = get_edges_from_pcap(pcap)
+    show_edges(edges, macs_to_ip)
 
-quit()
-with open('export','wb') as f:
-    devices = Network.get_devices_from_pcap(pcap)
-    net = Network(devices)
-    print('Network object constructed.')
-    dump(net, f)
-    print('Network object dumped to file.')
+    quit()
+    with open('export','wb') as f:
+        devices = Network.get_devices_from_pcap(pcap)
+        net = Network(devices)
+        print('Network object constructed.')
+        dump(net, f)
+        print('Network object dumped to file.')
 
-with open('export','rb') as f:
-    net: Network = load(f)
-    print('Network object loaded from file.')
-    net.plot_connections()
+    with open('export','rb') as f:
+        net: Network = load(f)
+        print('Network object loaded from file.')
+        net.plot_connections()
 
 
-#print(get_all_addresses(pcap, "ETH"))
+    #print(get_all_addresses(pcap, "ETH"))
