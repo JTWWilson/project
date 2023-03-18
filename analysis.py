@@ -10,7 +10,7 @@ from pickle import dump, load
 from copy import deepcopy
 from numpy import unique
 import socket
-from utils import get_manufacturer_from_mac
+from utils import get_manufacturer_from_mac, is_reserved_mac_address
 
 config = dotenv_values(".env")
 """
@@ -22,7 +22,7 @@ db = mysql.connector.connect(
 
 cursor = db.cursor()
 cursor.execute("SHOW DATABASES")
-print(type(cursor.fetchall()))
+print(type(cursor.fetchall()))  
 """
 pcap = pyshark.FileCapture('.pcap')
 
@@ -278,6 +278,11 @@ def show_edges(edges, macs_to_ip):
             name = socket.gethostbyaddr(macs_to_ip[mac])
             node_labels[mac] = name[0]
         except socket.herror:
+            # Check if the MAC address is reserved for something like multicast
+            reserved, reason = is_reserved_mac_address(mac)
+            if reserved:
+                node_labels[mac] = reason
+                continue
             # If that fails, try getting the manufacturer from the MAC address
             manufacturer = get_manufacturer_from_mac(mac)
             if manufacturer != "":
