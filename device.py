@@ -6,8 +6,8 @@ class Device:
         self.MAC_ADDRESS = mac_addr
         self.ip_addresses = ip_addresses
         self.devices_sent_to = {}
-        self.devices_received_from = {}
-        self.name = get_device_name(mac_addr)
+        self.devices_received_from = {} # TODO: Make MAC Address class
+        self.name = get_device_name(mac_addr, ip_addresses[0])
 
     @staticmethod
     def add_device_to_dict(dct: dict, mac: str) -> dict:

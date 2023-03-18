@@ -6,11 +6,12 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from pickle import dump, load
 import sqlite3
-from device import Device
+from device import Device, Router
 from device_db_manager import get_device_name
+from utils import is_local_ip_address, is_reserved_mac_address
 
 config = dotenv_values(".env")
-pcap = pyshark.FileCapture('andreeas-bigdownload.pcap')
+pcap = pyshark.FileCapture('2023-3-18_16-22-52.pcap')
 
 
 
@@ -92,7 +93,14 @@ class Network:
             # If it's an IP packet with MAC address
             if has_given_layer(packet, "ETH") and has_given_layer(packet, "IP"):
                 src_mac = packet.layers[0].src
+                src_ip = packet.layers[1].src
                 dst_mac = packet.layers[0].dst
+                dst_ip = packet.layers[1].dst
+
+                if not is_local_ip_address(src_ip) and not is_reserved_mac_address(src_mac)[0]: 
+                    src_mac = src_ip + "@" + src_mac
+                if not is_local_ip_address(dst_ip) and not is_reserved_mac_address(dst_mac)[0]: 
+                    dst_mac = dst_ip + "@" + dst_mac
                 # TODO: Make this less repetitive
 
                 # Make a new device if the src mac hasn't been seen yet
