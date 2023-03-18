@@ -156,13 +156,6 @@ def get_all_addresses(
 
 
 if __name__ == '__main__':
-    net = Network(Network.get_devices_from_pcap(pcap))
-    net.plot_connections()
-    #print(get_all_addresses(pcap, "IP"))
-    #edges, macs_to_ip = get_edges_from_pcap(pcap)
-    #show_edges(edges, macs_to_ip)
-
-    quit()
     with open('export','wb') as f:
         devices = Network.get_devices_from_pcap(pcap)
         net = Network(devices)
@@ -174,6 +167,3 @@ if __name__ == '__main__':
         net: Network = load(f)
         print('Network object loaded from file.')
         net.plot_connections()
-
-
-    #print(get_all_addresses(pcap, "ETH"))
