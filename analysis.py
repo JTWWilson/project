@@ -233,11 +233,14 @@ def get_devices_from_pcap(pcap: pyshark.FileCapture):
 
 
 def get_name_from_mac(mac: str, device_db=DEFAULT_DB_NAME) -> str:
+    """Returns a human readable name for a device from a mac address"""
     with sqlite3.connect(device_db) as connection:
+        # Look for the MAC address in the device database
         name = connection.execute("SELECT name FROM DEVICES WHERE mac = '{}';".format(mac)).fetchall()
-        print(name)
+        # If it's in the database, return its name, else try to work out its name 
         if name != []:
-            return name[0]
+            return name[0][0]
+
         try:
             # First try getting the device name
             name = socket.gethostbyaddr(macs_to_ip[mac])
