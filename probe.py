@@ -13,19 +13,7 @@ def get_targets() -> list:
     pass
 
 
-def add_device_to_database(connection: sqlite3.Connection, mac: str, name='', os_guess=['No Guess', -1]):
-    with connection:
-        existing_record = connection.execute("SELECT * FROM DEVICES WHERE mac = '{}';".format(mac))
-        if existing_record.fetchall() == []:
-            connection.execute("INSERT OR REPLACE INTO DEVICES (mac, name, os, certainty) VALUES ('{}','{}','{}','{}');".format(mac, name, os_guess[0], os_guess[1]))
-        else:
-            update = ""
-            if name != "":
-                update += "name = '{}',".format(name)
-            if os_guess != ['No Guess', -1]:
-                update += "os = '{}', certainty = '{}'".format(os_guess[0], os_guess[1])
-            #print("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
-            connection.execute("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
+
 
 
 def probe_ip_address(ip_address: str):

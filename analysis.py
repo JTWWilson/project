@@ -1,23 +1,21 @@
 import pyshark
 import typing
 from typing_extensions import Literal
-import mysql.connector
 from dotenv import dotenv_values
-import json
 import networkx as nx
 import matplotlib.pyplot as plt
 from pickle import dump, load
 from copy import deepcopy
 from numpy import unique
-import socket
 from utils import get_manufacturer_from_mac, is_reserved_mac_address
 from probe import add_device_to_database
 import sqlite3
 from device import Device
+from device_db_manager import get_device_name
 
 config = dotenv_values(".env")
 pcap = pyshark.FileCapture('andreeas-bigdownload.pcap')
-DEFAULT_DB_NAME = 'devices.db'
+
 
 
 class Network:
@@ -221,43 +219,13 @@ def get_devices_from_pcap(pcap: pyshark.FileCapture):
         return edges, macs_to_ip
 
 
-def get_name_from_mac(mac: str, device_db=DEFAULT_DB_NAME) -> str:
-    """Returns a human readable name for a device from a mac address"""
-    with sqlite3.connect(device_db) as connection:
-        # Look for the MAC address in the device database
-        name = connection.execute("SELECT name FROM DEVICES WHERE mac = '{}';".format(mac)).fetchall()
-        # If it's in the database, return its name, else try to work out its name 
-        if name != []:
-            return name[0][0]
-
-        try:
-            # First try getting the device name
-            name = socket.gethostbyaddr(macs_to_ip[mac])
-            add_device_to_database(connection, mac, name[0])
-            return name[0]
-        except socket.herror:
-            # Check if the MAC address is reserved for something like multicast
-            reserved, reason = is_reserved_mac_address(mac)
-            if reserved:
-                add_device_to_database(connection, mac, reason)
-                return reason
-            # If that fails, try getting the manufacturer from the MAC address
-            manufacturer = get_manufacturer_from_mac(mac)
-            if manufacturer != "":
-                add_device_to_database(connection, mac, manufacturer)
-                return manufacturer
-            else:
-                add_device_to_database(connection, mac)
-                return mac
-
-
 def show_edges(edges, macs_to_ip):
     g = nx.DiGraph()
     sorted_macs = sorted(macs_to_ip)
     print(sorted_macs)
     node_labels = {}
-    for i, mac in enumerate(sorted_macs):
-        node_labels[mac] = get_name_from_mac(mac)
+    for mac in sorted_macs:
+        node_labels[mac] = get_device_name(mac, ip=macs_to_ip[mac])
     
     for edge in edges:
         g.add_edge(edge[0], edge[1], weight=edges[edge])
@@ -272,7 +240,7 @@ def show_edges(edges, macs_to_ip):
     normalised_widths = []
     for k, v in widths.items():
         normalised_widths.append((v / max_width) * 5)
-    print(widths)
+    
     nx.draw_networkx(g, pos=nx.shell_layout(g), with_labels=False, width=normalised_widths)
     nx.draw_networkx_edge_labels(g,pos=nx.shell_layout(g),edge_labels=widths)
     nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_labels, font_size=10)

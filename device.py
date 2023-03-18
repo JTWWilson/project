@@ -1,3 +1,5 @@
+from device_db_manager import get_device_name
+
 class Device:
     """Represents a device with a MAC address as a primary key"""
     def __init__(self, mac_addr, ip_addresses: list=None) -> None:
@@ -5,6 +7,7 @@ class Device:
         self.ip_addresses = ip_addresses
         self.devices_sent_to = {}
         self.devices_received_from = {}
+        self.name = get_device_name(mac_addr)
 
     def __repr__(self) -> str:
         return self.MAC_ADDRESS
