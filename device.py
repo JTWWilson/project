@@ -9,6 +9,14 @@ class Device:
         self.devices_received_from = {}
         self.name = get_device_name(mac_addr)
 
+    @staticmethod
+    def add_device_to_dict(dct: dict, mac: str) -> dict:
+        if mac in dct:
+            dct[mac] += 1
+        else:
+            dct[mac] = 1
+        return dct
+
     def __repr__(self) -> str:
         return self.MAC_ADDRESS
 
