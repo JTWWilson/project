@@ -3,7 +3,7 @@ import sys
 from socket import gethostbyaddr, herror
 from utils import is_local_ip_address
 import sqlite3
-from analysis import Device
+from device import Device
 from scapy.layers.l2 import getmacbyip
 
 DEFAULT_DB_NAME = 'devices.db'

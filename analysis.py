@@ -11,6 +11,9 @@ from copy import deepcopy
 from numpy import unique
 import socket
 from utils import get_manufacturer_from_mac, is_reserved_mac_address
+from probe import add_device_to_database
+import sqlite3
+from device import Device
 
 config = dotenv_values(".env")
 """
@@ -24,45 +27,8 @@ cursor = db.cursor()
 cursor.execute("SHOW DATABASES")
 print(type(cursor.fetchall()))  
 """
-pcap = pyshark.FileCapture('.pcap')
-
-
-class Device:
-    def __init__(self, mac_addr, ip_addresses: list=None) -> None:
-        self.MAC_ADDRESS = mac_addr
-        self.ip_addresses = ip_addresses
-        self.devices_sent_to = {}
-        self.devices_received_from = {}
-
-    def __repr__(self) -> str:
-        return self.MAC_ADDRESS
-
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, str):
-            return self.MAC_ADDRESS == other
-        elif isinstance(other, Device):
-            return self.MAC_ADDRESS == other.MAC_ADDRESS
-        return False
-
-    def __lt__(self, other) -> bool:
-        return self.MAC_ADDRESS < other.MAC_ADDRESS
-    
-    def __gt__(self, other) -> bool:
-        return self.MAC_ADDRESS > other.MAC_ADDRESS
-
-    def __le__(self, other) -> bool:
-        return self.MAC_ADDRESS <= other.MAC_ADDRESS
-    
-    def __ge__(self, other) -> bool:
-        return self.MAC_ADDRESS >= other.MAC_ADDRESS
-
-    def __hash__(self) -> int:
-        return hash(self.MAC_ADDRESS)
-
-
-class DeviceEncoder(json.JSONEncoder):
-        def default(self, o):
-            return o.__dict__
+pcap = pyshark.FileCapture('andreeas-bigdownload.pcap')
+DEFAULT_DB_NAME = 'devices.db'
 
 
 class Network:
@@ -266,6 +232,32 @@ def get_devices_from_pcap(pcap: pyshark.FileCapture):
         return edges, macs_to_ip
 
 
+def get_name_from_mac(mac: str, device_db=DEFAULT_DB_NAME) -> str:
+    with sqlite3.connect(device_db) as connection:
+        name = connection.execute("SELECT name FROM DEVICES WHERE mac = '{}';".format(mac)).fetchall()
+        print(name)
+        if name != []:
+            return name[0]
+        try:
+            # First try getting the device name
+            name = socket.gethostbyaddr(macs_to_ip[mac])
+            add_device_to_database(connection, mac, name[0])
+            return name[0]
+        except socket.herror:
+            # Check if the MAC address is reserved for something like multicast
+            reserved, reason = is_reserved_mac_address(mac)
+            if reserved:
+                add_device_to_database(connection, mac, reason)
+                return reason
+            # If that fails, try getting the manufacturer from the MAC address
+            manufacturer = get_manufacturer_from_mac(mac)
+            if manufacturer != "":
+                add_device_to_database(connection, mac, manufacturer)
+                return manufacturer
+            else:
+                add_device_to_database(connection, mac)
+                return mac
+
 
 def show_edges(edges, macs_to_ip):
     g = nx.DiGraph()
@@ -273,22 +265,7 @@ def show_edges(edges, macs_to_ip):
     print(sorted_macs)
     node_labels = {}
     for i, mac in enumerate(sorted_macs):
-        try:
-            # First try getting the device name
-            name = socket.gethostbyaddr(macs_to_ip[mac])
-            node_labels[mac] = name[0]
-        except socket.herror:
-            # Check if the MAC address is reserved for something like multicast
-            reserved, reason = is_reserved_mac_address(mac)
-            if reserved:
-                node_labels[mac] = reason
-                continue
-            # If that fails, try getting the manufacturer from the MAC address
-            manufacturer = get_manufacturer_from_mac(mac)
-            if manufacturer != "":
-                node_labels[mac] = manufacturer
-            else:
-                node_labels[mac] = mac
+        node_labels[mac] = get_name_from_mac(mac)
     
     for edge in edges:
         g.add_edge(edge[0], edge[1], weight=edges[edge])
