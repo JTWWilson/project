@@ -10,6 +10,7 @@ from pickle import dump, load
 from copy import deepcopy
 from numpy import unique
 import socket
+from utils import get_manufacturer_from_mac
 
 config = dotenv_values(".env")
 """
@@ -23,7 +24,7 @@ cursor = db.cursor()
 cursor.execute("SHOW DATABASES")
 print(type(cursor.fetchall()))
 """
-pcap = pyshark.FileCapture('home-16-03-23.pcap')
+pcap = pyshark.FileCapture('.pcap')
 
 
 class Device:
@@ -270,13 +271,19 @@ def show_edges(edges, macs_to_ip):
     g = nx.DiGraph()
     sorted_macs = sorted(macs_to_ip)
     print(sorted_macs)
-    node_labels = []
+    node_labels = {}
     for i, mac in enumerate(sorted_macs):
         try:
+            # First try getting the device name
             name = socket.gethostbyaddr(macs_to_ip[mac])
-            node_labels.append(name[0])
+            node_labels[mac] = name[0]
         except socket.herror:
-            node_labels.append(mac)
+            # If that fails, try getting the manufacturer from the MAC address
+            manufacturer = get_manufacturer_from_mac(mac)
+            if manufacturer != "":
+                node_labels[mac] = manufacturer
+            else:
+                node_labels[mac] = mac
     for edge in edges:
         g.add_edge(edge[0], edge[1], weight=edges[edge])
     for mac in sorted_macs:
