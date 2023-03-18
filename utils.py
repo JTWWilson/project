@@ -11,6 +11,30 @@ def is_local_ip_address(ip_address: str) -> bool:
     return False
 
 
+def is_reserved_mac_address(mac: str) -> "tuple[bool, str]":
+    """
+    Returns boolean of whether the MAC address is reserved.
+    Sources of truth: https://en.wikipedia.org/wiki/Multicast_address; https://www.rfc-editor.org/rfc/rfc5342
+    TODO: Make this slightly more detailed and more true.
+    """
+    mac.upper()
+    if mac.startswith("01:80:C2"):
+        return True, "Multicast"
+    if mac.startswith("01:1B:19"):
+        return True, "Multicast"
+    if mac.startswith("01:00:5E"):
+        return True, "IPv4 Multicast"
+    if mac.startswith("33:33"):
+        return True, "IPv6 Multicast"
+    if mac.startswith("01:0C:CD"):
+        return True, "Multicast"
+    if mac.startswith("01:00:0C"):
+        return True, "Cisco Multicast"
+    if mac.startswith("CF"):
+        return True, "Reserved for PPP"
+    return False, "Unknown"
+
+
 def get_manufacturer_from_mac(mac: str) -> str:
     config = dotenv_values(".env")
     response = requests.get("https://api.maclookup.app/v2/macs/{}?apiKey={}".format(mac, config['maclookup_api_key']))
