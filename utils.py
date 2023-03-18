@@ -17,7 +17,9 @@ def is_reserved_mac_address(mac: str) -> "tuple[bool, str]":
     Sources of truth: https://en.wikipedia.org/wiki/Multicast_address; https://www.rfc-editor.org/rfc/rfc5342
     TODO: Make this slightly more detailed and more true.
     """
-    mac.upper()
+    mac = mac.upper()
+    if mac == "FF:FF:FF:FF:FF:FF":
+        return True, "Ethernet Broadcast"
     if mac.startswith("01:80:C2"):
         return True, "Multicast"
     if mac.startswith("01:1B:19"):
