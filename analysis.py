@@ -5,10 +5,6 @@ from dotenv import dotenv_values
 import networkx as nx
 import matplotlib.pyplot as plt
 from pickle import dump, load
-from copy import deepcopy
-from numpy import unique
-from utils import get_manufacturer_from_mac, is_reserved_mac_address
-from probe import add_device_to_database
 import sqlite3
 from device import Device
 from device_db_manager import get_device_name
@@ -19,8 +15,10 @@ pcap = pyshark.FileCapture('andreeas-bigdownload.pcap')
 
 
 class Network:
-    def __init__(self, devices=()) -> None:
-        self.devices = devices
+    def __init__(self, devices: typing.List[Device] =None) -> None:
+        if devices is None:
+            devices = list()
+        self.devices: typing.List[Device] = devices
 
     @staticmethod
     def add_to_device_dict(dct, device) -> dict:
@@ -32,75 +30,92 @@ class Network:
 
     @staticmethod
     def get_index_by_mac(devices: typing.List[Device], mac: str) -> int:
-            for i, d in enumerate(devices):
-                if d.MAC_ADDRESS == mac:
-                    return i
-            return False
+        """Returns the index of the first Device in the list to have a matching MAC address"""
+        for i, d in enumerate(devices):
+            if d.MAC_ADDRESS == mac:
+                return i
+        return False
 
     @staticmethod
     def get_device_by_mac(devices: typing.List[Device], mac: str):
-            for d in devices:
-                if d.MAC_ADDRESS == mac:
-                    return d
-            return False
+        """Returns first Device in the list to have a matching MAC address"""
+        for d in devices:
+            if d.MAC_ADDRESS == mac:
+                return d
+        return False
 
-    def make_edge_list(self):
-        #[(1,2), (2,3)]
-        edge_list = []
+    def add_edges(self, g: nx.Graph) -> nx.Graph:
+        """Adds packet traffic information from this Network onto an nx.Graph object"""
+        for device in self.devices:
+            for out_mac, weight in device.devices_sent_to.items():                
+                g.add_edge(device.MAC_ADDRESS, out_mac, weight=weight)
 
-        device: Device
-        for index, device in enumerate(self.devices):
-            out_device: Device
-            for out_device in device.devices_sent_to:                
-                edge_list.append((index, self.get_index_by_mac(self.devices, out_device.MAC_ADDRESS)))
+        return g
 
-        return edge_list
+    def add_nodes(self, g: nx.Graph) -> nx.Graph:
+        for device in self.devices:
+            g.add_node(device.MAC_ADDRESS, name=device.name)
+        return g
 
     def plot_connections(self):
-        graph = nx.DiGraph(self.make_edge_list())
-        nx.draw_networkx(graph)
+        g = nx.DiGraph()
+        g = self.add_edges(g)
+        g= self.add_nodes(g)
+
+        widths = nx.get_edge_attributes(g,'weight')
+        # normalise widths
+        max_width = max(list(widths.values()))
+        normalised_widths = []
+        for k, v in widths.items():
+            normalised_widths.append((v / max_width) * 5)
+
+        node_names = nx.get_node_attributes(g,'name')
+        print(node_names)
+
+        nx.draw_networkx(g, pos=nx.shell_layout(g), with_labels=False, width=normalised_widths)
+        nx.draw_networkx_edge_labels(g,pos=nx.shell_layout(g),edge_labels=widths)
+        nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_names, font_size=10)
         plt.show()
+
 
     @staticmethod
     def get_devices_from_pcap(pcap: pyshark.FileCapture):
-        """Turns a pcap into a list of Devices"""
         iterable_pcap = iter(pcap)
-        device_dict = {}
+        devices = []
 
+        # Loop through the pcap
         while True:
             try:
                 packet: pyshark.packet.packet.Packet = next(iterable_pcap) 
             except StopIteration:
                 break
-            if has_given_layer(packet, "ETH"):
+            # If it's an IP packet with MAC address
+            if has_given_layer(packet, "ETH") and has_given_layer(packet, "IP"):
                 src_mac = packet.layers[0].src
                 dst_mac = packet.layers[0].dst
-                print(device_dict)
-                mac_list = [d.MAC_ADDRESS for d in device_dict.keys()]
-                src = None
-                dst = None
+                # TODO: Make this less repetitive
 
-                if src_mac in mac_list:
-                    src: Device = Network.get_device_by_mac(device_dict.keys(), src_mac)
+                # Make a new device if the src mac hasn't been seen yet
+                if src_mac not in devices:
+                    new_device = Device(src_mac, [packet.layers[1].src])
+                    new_device.devices_sent_to[dst_mac] = 1
+                    devices.append(new_device)
                 else:
-                    src = Device(src_mac)
-                    if has_given_layer(packet, "IP"):
-                        src.ip_addresses.append(packet.layers[1].src)
-                if dst_mac in mac_list:
-                    dst: Device = Network.get_device_by_mac(device_dict.keys(), dst_mac)
-                else:
-                    dst = Device(dst_mac)
-                    if has_given_layer(packet, "IP"):
-                        dst.ip_addresses.append(packet.layers[1].dst)
-                
-                src.devices_sent_to = Network.add_to_device_dict(src.devices_sent_to, deepcopy(dst))
-                dst.devices_received_from = Network.add_to_device_dict(src.devices_received_from, deepcopy(src))
-                if src_mac in mac_list: 
-                    device_dict = Network.add_to_device_dict(device_dict, deepcopy(src))
-                if dst_mac not in mac_list: 
-                    device_dict = Network.add_to_device_dict(device_dict, deepcopy(dst))
+                    # Increment the number of times this src device has sent to this dst 
+                    existing_device: Device = devices[devices.index(src_mac)]
+                    Device.add_device_to_dict(existing_device.devices_sent_to, dst_mac)
 
-        return device_dict
+                # Make a new device if the dst mac hasn't been seen yet
+                if dst_mac not in devices:
+                    new_device = Device(dst_mac, [packet.layers[1].dst])
+                    new_device.devices_received_from[src_mac] = 1
+                    devices.append(new_device)
+                else:
+                    # Increment the number of times this dst device has been sent from this src
+                    existing_device: Device = devices[devices.index(dst_mac)]
+                    Device.add_device_to_dict(existing_device.devices_received_from, src_mac)
+
+        return devices
 
 
 def has_given_layer(
@@ -140,117 +155,12 @@ def get_all_addresses(
     return addresses
 
 
-def get_edges_from_pcap(pcap: pyshark.FileCapture):
-        """Turns a pcap into a list of edges with widths"""
-        iterable_pcap = iter(pcap)
-        edges = {}
-        macs_to_ip = {}
-
-        while True:
-            try:
-                packet: pyshark.packet.packet.Packet = next(iterable_pcap) 
-            except StopIteration:
-                break
-            if has_given_layer(packet, "ETH") and has_given_layer(packet, "IP"):
-                src_mac = packet.layers[0].src
-                dst_mac = packet.layers[0].dst
-                
-                if src_mac not in macs_to_ip:
-                    macs_to_ip[src_mac] = packet.layers[1].src
-                if dst_mac not in macs_to_ip:
-                    macs_to_ip[dst_mac] = packet.layers[1].dst
-
-                if (src_mac, dst_mac) in edges.keys():
-                    edges[(src_mac, dst_mac)] += 1
-                else:
-                    edges[(src_mac, dst_mac)] = 1
-        return edges, macs_to_ip
-
-
-def get_devices_from_pcap(pcap: pyshark.FileCapture):
-        """Turns a pcap into a list of edges with widths"""
-        iterable_pcap = iter(pcap)
-        devices = []
-        macs_to_ip = {}
-
-        # Loop through the pcap
-        while True:
-            try:
-                packet: pyshark.packet.packet.Packet = next(iterable_pcap) 
-            except StopIteration:
-                break
-            # If it's an IP packet with MAC address
-            if has_given_layer(packet, "ETH") and has_given_layer(packet, "IP"):
-                src_mac = packet.layers[0].src
-                dst_mac = packet.layers[0].dst
-                
-                # Make a new device if the src mac hasn't been seen yet
-                if src_mac not in devices:
-                    new_device = Device(src_mac, [packet.layers[1].src])
-                    new_device.devices_sent_to[dst_mac] = 1
-                    devices.append(new_device)
-                else:
-                    # Increment the number of times this src device has sent to this dst 
-                    existing_device: Device = devices[devices.index(src_mac)]
-                    if dst_mac in existing_device.devices_sent_to:
-                        existing_device.devices_sent_to[dst_mac] += 1
-                    else:
-                        existing_device.devices_sent_to[dst_mac] = 1
-
-                # Make a new device if the dst mac hasn't been seen yet
-                if dst_mac not in devices:
-                    new_device = Device(dst_mac, [packet.layers[1].dst])
-                    new_device.devices_received_from[src_mac] = 1
-                    devices.append(new_device)
-                else:
-                    # Increment the number of times this dst device has been sent from this src
-                    existing_device: Device = devices[devices.index(dst_mac)]
-                    if src_mac in existing_device.devices_received_from:
-                        existing_device.devices_received_from[src_mac] += 1
-                    else:
-                        existing_device.devices_received_from[src_mac] = 1
-
-                # Add this packet to the edges list
-                if (src_mac, dst_mac) in edges.keys():
-                    edges[(src_mac, dst_mac)] += 1
-                else:
-                    # Or increment the weight of this edge if it's been seen before
-                    edges[(src_mac, dst_mac)] = 1
-        return edges, macs_to_ip
-
-
-def show_edges(edges, macs_to_ip):
-    g = nx.DiGraph()
-    sorted_macs = sorted(macs_to_ip)
-    print(sorted_macs)
-    node_labels = {}
-    for mac in sorted_macs:
-        node_labels[mac] = get_device_name(mac, ip=macs_to_ip[mac])
-    
-    for edge in edges:
-        g.add_edge(edge[0], edge[1], weight=edges[edge])
-    
-    for mac in sorted_macs:
-            g.add_node(mac)
-    
-    widths = nx.get_edge_attributes(g,'weight')
-    print(widths)
-    # normalise widths
-    max_width = max(list(widths.values()))
-    normalised_widths = []
-    for k, v in widths.items():
-        normalised_widths.append((v / max_width) * 5)
-    
-    nx.draw_networkx(g, pos=nx.shell_layout(g), with_labels=False, width=normalised_widths)
-    nx.draw_networkx_edge_labels(g,pos=nx.shell_layout(g),edge_labels=widths)
-    nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_labels, font_size=10)
-    plt.show()
-
-
 if __name__ == '__main__':
-    print(get_all_addresses(pcap, "IP"))
-    edges, macs_to_ip = get_edges_from_pcap(pcap)
-    show_edges(edges, macs_to_ip)
+    net = Network(Network.get_devices_from_pcap(pcap))
+    net.plot_connections()
+    #print(get_all_addresses(pcap, "IP"))
+    #edges, macs_to_ip = get_edges_from_pcap(pcap)
+    #show_edges(edges, macs_to_ip)
 
     quit()
     with open('export','wb') as f:
