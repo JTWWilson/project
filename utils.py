@@ -38,6 +38,7 @@ def is_reserved_mac_address(mac: str) -> "tuple[bool, str]":
 
 
 def get_manufacturer_from_mac(mac: str) -> str:
+    """Looks up the manufacturer of a device based on its MAC address. Uses https://maclookup.app/api-v2/documentation"""
     config = dotenv_values(".env")
     response = requests.get("https://api.maclookup.app/v2/macs/{}?apiKey={}".format(mac, config['maclookup_api_key']))
     if response.status_code == 200:

@@ -1,6 +1,8 @@
 import socket
 import sqlite3
 from utils import get_manufacturer_from_mac, is_reserved_mac_address
+import ssl
+from cryptography import x509
 
 DEFAULT_DB_NAME = 'devices.db'
 
@@ -36,6 +38,13 @@ def get_device_name(mac: str, ip: str =None, device_db=DEFAULT_DB_NAME) -> str:
                 return name[0]
             except socket.herror:
                 pass
+            try:
+                cert = ssl.get_server_certificate((ip, 443))
+                cert_decoded = x509.load_pem_x509_certificate(str.encode(cert)) 
+                return cert_decoded.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
+            except OSError:
+                pass
+        print(ip)
         # Check if the MAC address is reserved for something like multicast
         reserved, reason = is_reserved_mac_address(mac)
         if reserved:
@@ -64,3 +73,7 @@ def add_device_to_database(connection: sqlite3.Connection, mac: str, name='', os
                 update += "os = '{}', certainty = '{}'".format(os_guess[0], os_guess[1])
             #print("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
             connection.execute("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
+
+
+if __name__ == "__main__":
+    pass
