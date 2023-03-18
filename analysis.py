@@ -284,11 +284,23 @@ def show_edges(edges, macs_to_ip):
                 node_labels[mac] = manufacturer
             else:
                 node_labels[mac] = mac
+    
     for edge in edges:
         g.add_edge(edge[0], edge[1], weight=edges[edge])
+    
     for mac in sorted_macs:
             g.add_node(mac)
-    nx.draw(g, pos=nx.shell_layout(g), with_labels=False)
+    
+    widths = nx.get_edge_attributes(g,'weight')
+    print(widths)
+    # normalise widths
+    max_width = max(list(widths.values()))
+    normalised_widths = []
+    for k, v in widths.items():
+        normalised_widths.append((v / max_width) * 5)
+    print(widths)
+    nx.draw_networkx(g, pos=nx.shell_layout(g), with_labels=False, width=normalised_widths)
+    nx.draw_networkx_edge_labels(g,pos=nx.shell_layout(g),edge_labels=widths)
     nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_labels, font_size=10)
     plt.show()
 
