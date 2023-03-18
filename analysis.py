@@ -16,17 +16,6 @@ import sqlite3
 from device import Device
 
 config = dotenv_values(".env")
-"""
-db = mysql.connector.connect(
-  host="fyp-db.cytclda6g1lu.eu-west-2.rds.amazonaws.com",
-  user=config['db_username'],
-  password=config['db_password']
-)
-
-cursor = db.cursor()
-cursor.execute("SHOW DATABASES")
-print(type(cursor.fetchall()))  
-"""
 pcap = pyshark.FileCapture('andreeas-bigdownload.pcap')
 DEFAULT_DB_NAME = 'devices.db'
 
