@@ -49,8 +49,9 @@ class Network:
     def add_edges(self, g: nx.Graph) -> nx.Graph:
         """Adds packet traffic information from this Network onto an nx.Graph object"""
         for device in self.devices:
-            for out_mac, weight in device.devices_sent_to.items():                
-                g.add_edge(device.MAC_ADDRESS, out_mac, weight=weight)
+            for out_mac in device.devices_sent_to.keys():
+                for out_port, weight in device.devices_sent_to[out_mac].items():
+                    g.add_edge(device.MAC_ADDRESS, out_mac, dst_port=out_port, weight=weight)
 
         return g
 
@@ -60,10 +61,10 @@ class Network:
         return g
 
     def plot_connections(self):
-        g = nx.DiGraph()
+        g = nx.MultiDiGraph()
         g = self.add_edges(g)
         g = self.add_nodes(g)
-        pos = nx.shell_layout(g)
+        pos =nx.kamada_kawai_layout(g)
 
         widths = nx.get_edge_attributes(g,'weight')
         # normalise widths
@@ -75,9 +76,12 @@ class Network:
         node_names = nx.get_node_attributes(g,'name')
         print(node_names)
 
+        dst_ports = nx.get_edge_attributes(g,'dst_port')
+        print(dst_ports)
+
         nodes = nx.draw_networkx_nodes(g, pos=pos)
         nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
-        nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=widths)
+        #nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
         nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
         
         def update_annot(sel):
@@ -121,6 +125,10 @@ class Network:
                 src_ip = packet.layers[1].src
                 dst_mac = packet.layers[0].dst
                 dst_ip = packet.layers[1].dst
+                if has_given_layer(packet, "TCP"):
+                    dst_port = packet.layers[2].dstport
+                else:
+                    dst_port = -1
 
                 if not is_local_ip_address(src_ip) and not is_reserved_mac_address(src_mac)[0]: 
                     src_mac = src_ip + "@" + src_mac
@@ -131,29 +139,29 @@ class Network:
                 # Make a new device if the src mac hasn't been seen yet
                 if src_mac not in devices:
                     new_device = Device(src_mac, [packet.layers[1].src])
-                    new_device.devices_sent_to[dst_mac] = 1
+                    new_device.devices_sent_to[dst_mac] = {dst_port: 1}
                     devices.append(new_device)
                 else:
                     # Increment the number of times this src device has sent to this dst 
                     existing_device: Device = devices[devices.index(src_mac)]
-                    Device.add_device_to_dict(existing_device.devices_sent_to, dst_mac)
+                    Device.add_packet_to_dict(existing_device.devices_sent_to, dst_mac, dst_port)
 
                 # Make a new device if the dst mac hasn't been seen yet
                 if dst_mac not in devices:
                     new_device = Device(dst_mac, [packet.layers[1].dst])
-                    new_device.devices_received_from[src_mac] = 1
+                    #new_device.devices_received_from[src_mac] = 1
                     devices.append(new_device)
                 else:
                     # Increment the number of times this dst device has been sent from this src
                     existing_device: Device = devices[devices.index(dst_mac)]
-                    Device.add_device_to_dict(existing_device.devices_received_from, src_mac)
+                    #Device.add_device_to_dict(existing_device.devices_received_from, src_mac)
 
         return devices
 
 
 def has_given_layer(
     packet: pyshark.packet.packet.Packet, 
-    layer: Literal["ETH", "IP"] = "ETH") -> bool:
+    layer: Literal["ETH", "IP", "TCP"] = "ETH") -> bool:
     try:
         packet[layer]
         return True

@@ -10,11 +10,18 @@ class Device:
         self.name = get_device_name(mac_addr, ip_addresses[0])
 
     @staticmethod
-    def add_device_to_dict(dct: dict, mac: str) -> dict:
-        if mac in dct:
-            dct[mac] += 1
+    def add_packet_to_dict(dct: dict, mac: str, dest_port: int) -> dict:
+        """dtc strucure:
+        {
+            "00:00:00:00:00:00" : {1: 3}
+        }"""
+        if mac in dct.keys():
+            if dest_port in dct[mac].keys():
+                dct[mac][dest_port] += 1
+            else:
+                dct[mac] = {dest_port: 1}
         else:
-            dct[mac] = 1
+            dct[mac] = {dest_port: 1}
         return dct
 
     def __repr__(self) -> str:
