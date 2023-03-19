@@ -47,7 +47,7 @@ class Network:
                 return d
         return False
 
-    def add_edges(self, g: nx.Graph) -> nx.Graph:
+    def add_edges(self, g: nx.Graph, allow_router: bool =True, allow_multicast: bool =True, allow_local: bool =True, allow_external: bool =True) -> nx.Graph:
         """Adds packet traffic information from this Network onto an nx.Graph object"""
         router_mac, router_ip = Network.get_router_addresses()
         for device in self.devices:
@@ -62,58 +62,78 @@ class Network:
                     g.add_edge(device.MAC_ADDRESS, router_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)                        
                     g.add_edge(router_mac, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
                 else:
-                    print(out_mac)
                     g.add_edge(device.MAC_ADDRESS, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
 
         return g
 
-    def add_nodes(self, g: nx.Graph) -> nx.Graph:
+    def add_edges_ignore_router(self, g: nx.Graph, allow_router: bool =True, allow_multicast: bool =True, allow_local: bool =True, allow_external: bool =True) -> nx.Graph:
+        """Adds packet traffic information from this Network onto an nx.Graph object"""
         router_mac, router_ip = Network.get_router_addresses()
         for device in self.devices:
-            if device.MAC_ADDRESS == router_mac:
-                g.add_node(router_mac, name=device.name, color="black", local_addr="Router", layer=2)
-                continue
-            if is_reserved_mac_address(device.MAC_ADDRESS)[0]:
-                colour = "green"
-                local_addr = "Multicast"
-                layer = 4
-            elif all([is_local_ip_address(ip) for ip in device.ip_addresses]):
-                colour = "blue"
-                local_addr = "True"
-                layer = 3
-            elif all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
-                colour = "red"
-                local_addr = "False"
-                layer = 1
-            g.add_node(device.MAC_ADDRESS, name=device.name, color=colour, local_addr=local_addr, layer=layer)
+            for out_mac in device.devices_sent_to.keys():
+                if not allow_router and router_mac in (device.MAC_ADDRESS, out_mac):
+                    continue
+                if not allow_multicast and (is_reserved_mac_address(device.MAC_ADDRESS)[0] or is_reserved_mac_address(out_mac)[0]):
+                    continue
+                if not allow_local and all([is_local_ip_address(ip) for ip in device.ip_addresses]):
+                    continue
+                if not allow_external and all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
+                    continue
+                total_packets = 0
+                port_report = ""
+                for out_port, weight in device.devices_sent_to[out_mac].items():
+                    total_packets += weight
+                    if out_port != -1:
+                        port_report += "Port {}: {}pkts, ".format(out_port, weight)
+                    g.add_edge(device.MAC_ADDRESS, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
+
         return g
 
-    def plot_connections(self):
-        g = nx.DiGraph()
+    def add_nodes(self, g: nx.Graph, allow_router: bool =True, allow_multicast: bool =True, allow_local: bool =True, allow_external: bool =True) -> nx.Graph:
+        router_mac, router_ip = Network.get_router_addresses()
+        for device in self.devices:
+            if allow_router and device.MAC_ADDRESS == router_mac:
+                g.add_node(router_mac, name=device.name, color="black", local_addr="Router", layer=2)
+                continue
+            if allow_multicast and is_reserved_mac_address(device.MAC_ADDRESS)[0]:
+                g.add_node(device.MAC_ADDRESS, name=device.name, color="green", local_addr="Multicast", layer=4)
+            elif allow_local and all([is_local_ip_address(ip) for ip in device.ip_addresses]):
+                g.add_node(device.MAC_ADDRESS, name=device.name, color="blue", local_addr="Local", layer=3)
+            elif allow_external and all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
+                g.add_node(device.MAC_ADDRESS, name=device.name, color="red", local_addr="External", layer=1)
+        return g
+
+    def plot_connections(self, layout):
+        if layout == "multipartite":
+            self.plot_multipartite()
+
+
+    def plot_multi_spring(self):
+        outside_network = nx.DiGraph()
+        outside_network = self.add_nodes(outside_network, allow_external=True, allow_router=True, allow_local=False, allow_multicast=False)
+        outside_network = self.add_edges(outside_network)
         g = self.add_edges(g)
         g = self.add_nodes(g)
 
         pos = nx.multipartite_layout(g, subset_key='layer')
 
-        widths = nx.get_edge_attributes(g,'weight')
-        # normalise widths
-        max_width = max(list(widths.values()))
-        normalised_widths = []
-        for k, v in widths.items():
-            normalised_widths.append((v / max_width) * 5)
+        normalised_widths = self.normalise_widths(nx.get_edge_attributes(g,'weight'))
 
         node_names = nx.get_node_attributes(g,'name')
         node_colours = nx.get_node_attributes(g,'color')
-        print(node_names)
 
         dst_ports = nx.get_edge_attributes(g,'dst_ports')
-        print(dst_ports)
 
         nodes = nx.draw_networkx_nodes(g, pos=pos, node_color=list(node_colours.values()))
         edges = nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
         nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
         nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
-        
+        self.add_hover_popup(g, nodes)
+
+        plt.show()
+
+    def add_hover_popup(self, g: nx.Graph, nodes):
+        """Adds a popup to nodes which displays information about the node when it is hovered over."""
         def update_annot(sel):
             """
             Moves annotation to hovered node
@@ -135,8 +155,33 @@ class Network:
         cursor.connect('add', update_annot)
         cursor.connect('remove', hide_annot)
 
-        cursor = mplcursors.cursor(edges, hover=2)
-        cursor.connect('add', update_annot)
+
+    def normalise_widths(self, widths) -> list:
+        max_width = max(list(widths.values()))
+        normalised_widths = []
+        for k, v in widths.items():
+            normalised_widths.append((v / max_width) * 5)
+        return normalised_widths
+
+    def plot_multipartite(self):
+        g = nx.DiGraph()
+        g = self.add_edges(g)
+        g = self.add_nodes(g)
+
+        pos = nx.multipartite_layout(g, subset_key='layer')
+
+        normalised_widths = self.normalise_widths(nx.get_edge_attributes(g,'weight'))
+
+        node_names = nx.get_node_attributes(g,'name')
+        node_colours = nx.get_node_attributes(g,'color')
+
+        dst_ports = nx.get_edge_attributes(g,'dst_ports')
+
+        nodes = nx.draw_networkx_nodes(g, pos=pos, node_color=list(node_colours.values()))
+        edges = nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
+        nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
+        nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
+        self.add_hover_popup(g, nodes)
 
         plt.show()
 
@@ -145,6 +190,7 @@ class Network:
     def get_router_addresses(host="8.8.8.8") -> "Tuple[str, str]":
         from subprocess import Popen, PIPE
         p = Popen(['tracert', '-h', '1', host], stdout=PIPE)
+        # Assuming that the router is one hop away
         while True:
             line = p.stdout.readline()
             if not line:
@@ -263,4 +309,4 @@ if __name__ == '__main__':
     with open('export','rb') as f:
         net: Network = load(f)
         print('Network object loaded from file.')
-        net.plot_connections()
+        net.plot_connections("multipartite")
