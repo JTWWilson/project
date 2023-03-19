@@ -10,6 +10,7 @@ import mplcursors
 from device import Device
 from device_db_manager import get_device_name
 from utils import is_local_ip_address, is_reserved_mac_address
+import re
 
 config = dotenv_values(".env")
 pcap = pyshark.FileCapture('2023-3-18_16-22-52.pcap')
@@ -48,23 +49,43 @@ class Network:
 
     def add_edges(self, g: nx.Graph) -> nx.Graph:
         """Adds packet traffic information from this Network onto an nx.Graph object"""
+        router_mac, router_ip = Network.get_router_addresses()
         for device in self.devices:
             for out_mac in device.devices_sent_to.keys():
+                total_packets = 0
+                port_report = ""
                 for out_port, weight in device.devices_sent_to[out_mac].items():
-                    g.add_edge(device.MAC_ADDRESS, out_mac, dst_port=out_port, weight=weight)
+                    total_packets += weight
+                    if out_port != -1:
+                        port_report += "Port {}: {}pkts, ".format(out_port, weight)
+                if router_mac in out_mac and out_mac != router_mac:
+                    g.add_edge(device.MAC_ADDRESS, router_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)                        
+                    g.add_edge(router_mac, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
+                else:
+                    g.add_edge(device.MAC_ADDRESS, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
 
         return g
 
     def add_nodes(self, g: nx.Graph) -> nx.Graph:
+        router_mac, router_ip = Network.get_router_addresses()
         for device in self.devices:
-            g.add_node(device.MAC_ADDRESS, name=device.name)
+            if device.MAC_ADDRESS == router_mac:
+                g.add_node(router_mac, name=device.name, color="black", local_addr="Router")
+                continue
+            if all([is_local_ip_address(ip) for ip in device.ip_addresses]):
+                colour = "blue"
+                local_addr = "True"
+            elif all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
+                colour = "red"
+                local_addr = "False"
+            g.add_node(device.MAC_ADDRESS, name=device.name, color=colour, local_addr=local_addr)
         return g
 
     def plot_connections(self):
-        g = nx.MultiDiGraph()
+        g = nx.DiGraph()
         g = self.add_edges(g)
         g = self.add_nodes(g)
-        pos =nx.kamada_kawai_layout(g)
+        pos =nx.shell_layout(g)
 
         widths = nx.get_edge_attributes(g,'weight')
         # normalise widths
@@ -74,14 +95,18 @@ class Network:
             normalised_widths.append((v / max_width) * 5)
 
         node_names = nx.get_node_attributes(g,'name')
+        node_colours = nx.get_node_attributes(g,'color')
         print(node_names)
 
-        dst_ports = nx.get_edge_attributes(g,'dst_port')
+        dst_ports = nx.get_edge_attributes(g,'dst_ports')
         print(dst_ports)
+        for node in g.nodes(data=True):
+            if node[1]["local_addr"] == "Router":
+                node[1]["pos"] = (0,0)
 
-        nodes = nx.draw_networkx_nodes(g, pos=pos)
-        nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
-        #nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
+        nodes = nx.draw_networkx_nodes(g, pos=pos, node_color=list(node_colours.values()))
+        edges = nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
+        nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
         nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
         
         def update_annot(sel):
@@ -92,7 +117,7 @@ class Network:
             node_index = sel.index
             node_name = list(g.nodes)[node_index]
             node_attr = g.nodes[node_name]
-            text = node_name + ' ' + '\n'.join(f'{k}: {v}' for k, v in node_attr.items())
+            text = node_name + '\n' + '\n'.join(f'{k}: {v}' for k, v in node_attr.items())
             sel.annotation: Annotation
             sel.annotation.set_text(text)
         
@@ -105,7 +130,33 @@ class Network:
         cursor.connect('add', update_annot)
         cursor.connect('remove', hide_annot)
 
+        cursor = mplcursors.cursor(edges, hover=2)
+        cursor.connect('add', update_annot)
+
         plt.show()
+
+
+    @staticmethod
+    def get_router_addresses(host="8.8.8.8") -> "Tuple[str, str]":
+        from subprocess import Popen, PIPE
+        p = Popen(['tracert', '-h', '1', host], stdout=PIPE)
+        while True:
+            line = p.stdout.readline()
+            if not line:
+                break
+            ips_ish = re.findall("\d+\.\d+\.\d+\.\d+",str(line))
+            if ips_ish and host not in ips_ish:
+                router_ip = ips_ish[0]
+                break
+        
+        p = Popen(['arp', '-a', router_ip], stdout=PIPE)
+        while True:
+            line = p.stdout.readline()
+            if not line:
+                break
+            mac_ish = re.findall("..-..-..-..-..-..",str(line))
+            if mac_ish:
+                return ':'.join(mac_ish[0].split('-')), router_ip
 
 
     @staticmethod
