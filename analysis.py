@@ -4,9 +4,10 @@ from typing_extensions import Literal
 from dotenv import dotenv_values
 import networkx as nx
 import matplotlib.pyplot as plt
+from matplotlib.text import Annotation
 from pickle import dump, load
-import sqlite3
-from device import Device, Router
+import mplcursors
+from device import Device
 from device_db_manager import get_device_name
 from utils import is_local_ip_address, is_reserved_mac_address
 
@@ -61,7 +62,8 @@ class Network:
     def plot_connections(self):
         g = nx.DiGraph()
         g = self.add_edges(g)
-        g= self.add_nodes(g)
+        g = self.add_nodes(g)
+        pos = nx.shell_layout(g)
 
         widths = nx.get_edge_attributes(g,'weight')
         # normalise widths
@@ -73,9 +75,32 @@ class Network:
         node_names = nx.get_node_attributes(g,'name')
         print(node_names)
 
-        nx.draw_networkx(g, pos=nx.shell_layout(g), with_labels=False, width=normalised_widths)
-        nx.draw_networkx_edge_labels(g,pos=nx.shell_layout(g),edge_labels=widths)
-        nx.draw_networkx_labels(g, pos=nx.shell_layout(g), labels=node_names, font_size=10)
+        nodes = nx.draw_networkx_nodes(g, pos=pos)
+        nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
+        nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=widths)
+        nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
+        
+        def update_annot(sel):
+            """
+            Moves annotation to hovered node
+            Inspired by https://stackoverflow.com/questions/70340499/networkx-and-matplotlib-how-to-access-node-attributes-and-show-them-as-annotati
+            """
+            node_index = sel.index
+            node_name = list(g.nodes)[node_index]
+            node_attr = g.nodes[node_name]
+            text = node_name + ' ' + '\n'.join(f'{k}: {v}' for k, v in node_attr.items())
+            sel.annotation: Annotation
+            sel.annotation.set_text(text)
+        
+        def hide_annot(sel):
+            """Hides annotation once cursor moves away"""
+            sel.annotation: Annotation
+            sel.annotation.set_visible(False)
+        
+        cursor = mplcursors.cursor(nodes, hover=2)
+        cursor.connect('add', update_annot)
+        cursor.connect('remove', hide_annot)
+
         plt.show()
 
 
