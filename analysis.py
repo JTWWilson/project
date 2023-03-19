@@ -58,10 +58,11 @@ class Network:
                     total_packets += weight
                     if out_port != -1:
                         port_report += "Port {}: {}pkts, ".format(out_port, weight)
-                if router_mac in out_mac and out_mac != router_mac:
+                if (router_mac in out_mac or router_mac in device.MAC_ADDRESS) and out_mac != router_mac:
                     g.add_edge(device.MAC_ADDRESS, router_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)                        
                     g.add_edge(router_mac, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
                 else:
+                    print(out_mac)
                     g.add_edge(device.MAC_ADDRESS, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
 
         return g
@@ -70,22 +71,29 @@ class Network:
         router_mac, router_ip = Network.get_router_addresses()
         for device in self.devices:
             if device.MAC_ADDRESS == router_mac:
-                g.add_node(router_mac, name=device.name, color="black", local_addr="Router")
+                g.add_node(router_mac, name=device.name, color="black", local_addr="Router", layer=2)
                 continue
-            if all([is_local_ip_address(ip) for ip in device.ip_addresses]):
+            if is_reserved_mac_address(device.MAC_ADDRESS)[0]:
+                colour = "green"
+                local_addr = "Multicast"
+                layer = 4
+            elif all([is_local_ip_address(ip) for ip in device.ip_addresses]):
                 colour = "blue"
                 local_addr = "True"
+                layer = 3
             elif all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
                 colour = "red"
                 local_addr = "False"
-            g.add_node(device.MAC_ADDRESS, name=device.name, color=colour, local_addr=local_addr)
+                layer = 1
+            g.add_node(device.MAC_ADDRESS, name=device.name, color=colour, local_addr=local_addr, layer=layer)
         return g
 
     def plot_connections(self):
         g = nx.DiGraph()
         g = self.add_edges(g)
         g = self.add_nodes(g)
-        pos =nx.shell_layout(g)
+
+        pos = nx.multipartite_layout(g, subset_key='layer')
 
         widths = nx.get_edge_attributes(g,'weight')
         # normalise widths
@@ -100,9 +108,6 @@ class Network:
 
         dst_ports = nx.get_edge_attributes(g,'dst_ports')
         print(dst_ports)
-        for node in g.nodes(data=True):
-            if node[1]["local_addr"] == "Router":
-                node[1]["pos"] = (0,0)
 
         nodes = nx.draw_networkx_nodes(g, pos=pos, node_color=list(node_colours.values()))
         edges = nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
