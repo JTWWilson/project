@@ -34,7 +34,7 @@ def get_device_name(mac: str, ip: str =None, device_db=DEFAULT_DB_NAME) -> str:
             try:
                 # First try getting the device name
                 name = socket.gethostbyaddr(ip)
-                add_device_to_database(connection, mac + '@' + ip, name[0])
+                add_device_to_database(connection, ip + '@' + mac, name[0])
                 return name[0]
             except socket.herror:
                 pass
