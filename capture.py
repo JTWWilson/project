@@ -14,7 +14,6 @@ def capture(output_file=None):
     threading.Thread(target=cap.sniff, kwargs={'timeout': 60}).start()
     ping("192.168.255.255")
     ping("10.255.255.255")
-    ping("172.255.255.255")
 
 
 def send_arp(ip: str):
