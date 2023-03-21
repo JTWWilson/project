@@ -48,8 +48,14 @@ def probe_device_name(mac: str, ip=None) -> str:
 
 
 def probe_ip_address(ip_address: str) -> list[str, int]:
+    print("Probing {}".format(ip_address))
+    if ip_address.endswith(".255"):
+        return ["Broadcast address", -1]
     scanner = nmap.PortScanner()
-    scanner.scan(ip_address, arguments="-O")
+    try:
+        scanner.scan(ip_address, arguments="-O", timeout=30)
+    except nmap.nmap.PortScannerTimeout:
+        return ["No match for OS found", -1]
 
     try:
         if 'osmatch' in scanner[ip_address]:

@@ -8,7 +8,8 @@ def ensure_device_table_exists(connection: sqlite3.Connection) -> None:
             mac TEXT NOT NULL PRIMARY KEY,
             name TEXT,
             os TEXT,
-            certainty INTEGER
+            certainty INTEGER,
+            is_router INTEGER
         );
     """)
 
@@ -38,6 +39,7 @@ def add_device_to_database(mac: str, device_db=DEFAULT_DB_NAME, name='', os_gues
                 update += "name = '{}',".format(name)
             if os_guess != ['No Guess', -1]:
                 update += "os = '{}', certainty = '{}'".format(os_guess[0], os_guess[1])
+            update += "is_router = '{}'".format(is_router)
             #print("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
             connection.execute("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
 

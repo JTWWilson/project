@@ -10,9 +10,11 @@ import mplcursors
 from device import Device
 from device_db_manager import get_device_name, get_router_list
 from utils import is_local_ip_address, is_reserved_mac_address
+import numpy as np
+from community_layout.layout_class import CommunityLayout
 
 config = dotenv_values(".env")
-pcap = pyshark.FileCapture('2023-3-18_16-22-52.pcap')
+pcap = pyshark.FileCapture('2023-3-21_22-8-20.pcap')
 
 
 
@@ -126,12 +128,31 @@ class Network:
             self.plot_multipartite()
 
 
-    def plot_multi_spring(self): #WIP
+    def plot_custom(self): #WIP
+        g = nx.DiGraph()
+
+        g = self.add_nodes(g, allow_router=True)
+        g = self.add_edges(g)
+
+        pos = nx.multipartite_layout(g, subset_key='layer')
+
+        x_shuffle = 0
+        router_list = get_router_list()
+        for node, (x,y) in pos.items():
+            if node in router_list:
+                pos[node] = np.array([x*2, y])
+                x_shuffle = x
+                break
+        
         outside_network = nx.DiGraph()
         outside_network = self.add_nodes(outside_network, allow_external=True, allow_router=True, allow_local=False, allow_multicast=False)
         outside_network = self.add_edges(outside_network)
-        g = self.add_edges(g)
-        g = self.add_nodes(g)
+        outside_pos = nx.multipartite_layout(outside_network, subset_key="layer")
+
+        inside_network = nx.DiGraph()
+        inside_network = self.add_nodes(inside_network, allow_external=False, allow_router=True, allow_local=True, allow_multicast=True)
+        inside_network = self.add_edges(inside_network)
+        inside_pos = nx.spring_layout(inside_network)
 
         pos = nx.multipartite_layout(g, subset_key='layer')
 
@@ -187,7 +208,35 @@ class Network:
         g = self.add_nodes(g, allow_router=True)
         g = self.add_edges(g)
 
+
+        internal_net = nx.DiGraph()
+
+        internal_net = self.add_nodes(internal_net, allow_router=False, allow_local=True, allow_external=False, allow_multicast=False)
+        internal_net = self.add_edges(internal_net)
+        internal_pos = nx.shell_layout(internal_net)
+        internal_nodes = internal_net.nodes
+
+        #layout = CommunityLayout(g, layout_algorithm=nx.bipartite_layout, layout_kwargs={})
+        #pos = layout.full_positions
         pos = nx.multipartite_layout(g, subset_key='layer')
+
+        # get distance between x_min and x_max
+        x_min = min([x for x, y in pos.values()])
+        x_max = max([x for x, y in pos.values()])
+
+        router_list = get_router_list()
+
+        
+        for node, (x,y) in pos.items():
+            if node in router_list:
+                pos[node] = np.array([x_min*0.5, y])
+                continue
+            if node in internal_nodes:
+                pos[node] = np.array([internal_pos[node][0] * 0.4 * x_max + 0.3 * x_max, internal_pos[node][1]]) 
+
+        label_pos = {}
+        for node, (x,y) in pos.items():
+            label_pos[node] = (x, y-0.05)
 
         normalised_widths = self.normalise_widths(nx.get_edge_attributes(g,'weight'))
 
@@ -199,14 +248,14 @@ class Network:
         nodes = nx.draw_networkx_nodes(g, pos=pos, node_color=list(node_colours.values()))
         edges = nx.draw_networkx_edges(g, pos=pos, width=normalised_widths)
         nx.draw_networkx_edge_labels(g,pos=pos,edge_labels=dst_ports)
-        nx.draw_networkx_labels(g, pos=pos, labels=node_names, font_size=10)
+        nx.draw_networkx_labels(g, pos=label_pos, labels=node_names, font_size=10)
         self.add_hover_popup(g, nodes)
 
         plt.show()
 
 
     @staticmethod
-    def get_devices_from_pcap(pcap: pyshark.FileCapture):
+    def get_devices_from_pcap(pcap: pyshark.capture.capture.Capture):
         iterable_pcap = iter(pcap)
         devices = []
 
@@ -235,7 +284,7 @@ class Network:
 
                 # Make a new device if the src mac hasn't been seen yet
                 if src_mac not in devices:
-                    new_device = Device(src_mac, [packet.layers[1].src])
+                    new_device = Device(src_mac, [str(packet.layers[1].src)])
                     new_device.devices_sent_to[dst_mac] = {dst_port: 1}
                     devices.append(new_device)
                 else:
@@ -245,7 +294,7 @@ class Network:
 
                 # Make a new device if the dst mac hasn't been seen yet
                 if dst_mac not in devices:
-                    new_device = Device(dst_mac, [packet.layers[1].dst])
+                    new_device = Device(dst_mac, [str(packet.layers[1].dst)])
                     #new_device.devices_received_from[src_mac] = 1
                     devices.append(new_device)
                 else:
@@ -291,6 +340,8 @@ def get_all_addresses(
         i += 1
 
     return addresses
+
+
 
 
 if __name__ == '__main__':
