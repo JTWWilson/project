@@ -64,8 +64,6 @@ def probe_ip_address(ip_address: str) -> list[str, int]:
 
         return ["No match for OS found", -1]
     except KeyError as e:
-        print(e)
-        print(scanner)
         return ["Scan incomplete", -1]
 
 

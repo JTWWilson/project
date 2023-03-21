@@ -61,7 +61,6 @@ class Network:
 
         for device in filtered_devices:
             for out_mac in device.devices_sent_to.keys():
-                print(out_mac)
                 if out_mac in filtered_devices:
                     total_packets = 0
                     port_report = ""
