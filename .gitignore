@@ -2,3 +2,5 @@
 .env
 .vscode/*
 *.pcap
+*.db
+__pycache__/*
