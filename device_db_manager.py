@@ -26,7 +26,7 @@ def get_device_name(mac: str, device_db=DEFAULT_DB_NAME) -> str:
             return mac
         
 
-def add_device_to_database( mac: str, device_db=DEFAULT_DB_NAME, name='', os_guess=['No Guess', -1], is_router=0):
+def add_device_to_database(mac: str, device_db=DEFAULT_DB_NAME, name='', os_guess=['No Guess', -1], is_router=0):
     with sqlite3.connect(device_db) as connection:
         ensure_device_table_exists(connection)
         existing_record = connection.execute("SELECT * FROM DEVICES WHERE mac = '{}';".format(mac))
