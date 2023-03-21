@@ -7,7 +7,7 @@ class Device:
         self.ip_addresses = ip_addresses
         self.devices_sent_to = {}
         self.devices_received_from = {} # TODO: Make MAC Address class
-        self.name = get_device_name(mac_addr, ip_addresses[0])
+        self.name = get_device_name(mac_addr)
 
     @staticmethod
     def add_packet_to_dict(dct: dict, mac: str, dest_port: int) -> dict:
