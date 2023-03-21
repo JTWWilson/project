@@ -5,6 +5,11 @@ from utils import is_local_ip_address
 import sqlite3
 from device import Device
 from scapy.layers.l2 import getmacbyip
+import socket
+import ssl
+from cryptography import x509
+from utils import is_reserved_mac_address,get_manufacturer_from_mac
+from device_db_manager import add_device_to_database
 
 DEFAULT_DB_NAME = 'devices.db'
 
@@ -13,7 +18,39 @@ def get_targets() -> list:
     pass
 
 
+def probe_device_name(mac: str):
+    router = 0
+    if '@' in mac:
+        ip, mac = mac.split('@')
 
+    if ip is not None:
+        try:
+            # First try getting the device name
+            name = socket.gethostbyaddr(ip)
+            add_device_to_database(connection, ip + '@' + mac, name=name[0], is_router=router)
+            return name[0]
+        except socket.herror:
+            pass
+        try:
+            cert = ssl.get_server_certificate((ip, 443))
+            cert_decoded = x509.load_pem_x509_certificate(str.encode(cert)) 
+            return cert_decoded.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
+        except OSError:
+            pass
+    print(ip)
+    # Check if the MAC address is reserved for something like multicast
+    reserved, reason = is_reserved_mac_address(mac)
+    if reserved:
+        add_device_to_database(connection, mac, name=reason, is_router=router)
+        return reason
+    # If that fails, try getting the manufacturer from the MAC address
+    manufacturer = get_manufacturer_from_mac(mac)
+    if manufacturer != "":
+        add_device_to_database(connection, mac, name=manufacturer, is_router=router)
+        return manufacturer
+    else:
+        add_device_to_database(connection, mac, is_router=router)
+        return mac
 
 
 def probe_ip_address(ip_address: str):
@@ -44,7 +81,7 @@ def probe_list_of_targets(targets, device_db=DEFAULT_DB_NAME):
         CREATE TABLE IF NOT EXISTS DEVICES (
             mac TEXT NOT NULL PRIMARY KEY,
             name TEXT,
-            os TEXT
+            os TEXT,
             certainty INTEGER
         );
     """)
@@ -81,4 +118,3 @@ if __name__ == '__main__':
             certainty INTEGER
         );
     """)
-    add_device_to_database(connection, "00:00:00:00:00:00", 'test device', ['test OS', '85'])
