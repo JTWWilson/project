@@ -9,7 +9,6 @@ import socket
 import ssl
 from cryptography import x509
 from utils import is_reserved_mac_address,get_manufacturer_from_mac
-from device_db_manager import add_device_to_database
 
 DEFAULT_DB_NAME = 'devices.db'
 
@@ -18,8 +17,7 @@ def get_targets() -> list:
     pass
 
 
-def probe_device_name(mac: str):
-    router = 0
+def probe_device_name(mac: str, ip=None) -> str:
     if '@' in mac:
         ip, mac = mac.split('@')
 
@@ -27,7 +25,6 @@ def probe_device_name(mac: str):
         try:
             # First try getting the device name
             name = socket.gethostbyaddr(ip)
-            add_device_to_database(connection, ip + '@' + mac, name=name[0], is_router=router)
             return name[0]
         except socket.herror:
             pass
@@ -37,23 +34,20 @@ def probe_device_name(mac: str):
             return cert_decoded.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)[0].value
         except OSError:
             pass
-    print(ip)
+
     # Check if the MAC address is reserved for something like multicast
     reserved, reason = is_reserved_mac_address(mac)
     if reserved:
-        add_device_to_database(connection, mac, name=reason, is_router=router)
         return reason
     # If that fails, try getting the manufacturer from the MAC address
     manufacturer = get_manufacturer_from_mac(mac)
     if manufacturer != "":
-        add_device_to_database(connection, mac, name=manufacturer, is_router=router)
         return manufacturer
     else:
-        add_device_to_database(connection, mac, is_router=router)
         return mac
 
 
-def probe_ip_address(ip_address: str):
+def probe_ip_address(ip_address: str) -> list[str, int]:
     scanner = nmap.PortScanner()
     scanner.scan(ip_address, arguments="-O")
 
