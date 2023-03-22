@@ -11,11 +11,9 @@ from device import Device
 from device_db_manager import get_device_name, get_router_list
 from utils import is_local_ip_address, is_reserved_mac_address
 import numpy as np
-from community_layout.layout_class import CommunityLayout
+import sys
 
 config = dotenv_values(".env")
-pcap = pyshark.FileCapture('2023-3-21_22-8-20.pcap')
-
 
 
 class Network:
@@ -55,7 +53,8 @@ class Network:
 
         router_mac = None
         router_list = get_router_list()
-        for device in filtered_devices: 
+        print(router_list)
+        for device in filtered_devices:
             if device in router_list:
                 router_mac = device.MAC_ADDRESS
 
@@ -228,10 +227,10 @@ class Network:
         
         for node, (x,y) in pos.items():
             if node in router_list:
-                pos[node] = np.array([x_min*0.5, y])
+                pos[node] = np.array([x_min*0.3, y])
                 continue
             if node in internal_nodes:
-                pos[node] = np.array([internal_pos[node][0] * 0.4 * x_max + 0.3 * x_max, internal_pos[node][1]]) 
+                pos[node] = np.array([internal_pos[node][0] * 0.3 * x_max + 0.35 * x_max, internal_pos[node][1]]) 
 
         label_pos = {}
         for node, (x,y) in pos.items():
@@ -344,6 +343,14 @@ def get_all_addresses(
 
 
 if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        pcap_path = sys.argv[1]
+    else:
+        quit("No path to a pcap was given.")
+    pcap = pyshark.FileCapture(pcap_path)
+    net = Network(Network.get_devices_from_pcap(pcap))
+    net.plot_connections("multipartite")
+    """
     with open('export','wb') as f:
         devices = Network.get_devices_from_pcap(pcap)
         net = Network(devices)
@@ -355,3 +362,4 @@ if __name__ == '__main__':
         net: Network = load(f)
         print('Network object loaded from file.')
         net.plot_connections("multipartite")
+    """
