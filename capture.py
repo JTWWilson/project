@@ -9,16 +9,19 @@ from device_db_manager import add_device_to_database, get_device_name
 from analysis import Network
 import probe
 from device import Device
+import sys
+import argparse
 
-def capture(output_file=None) -> pyshark.capture.capture.Capture:
+
+def capture(time: int =60, output_file=None, capture_interface: str ="WiFI") -> pyshark.capture.capture.Capture:
     # Default name for file is the date and time of its capture
     if output_file is None:
         now = datetime.now()
         output_file = "{}-{}-{}_{}-{}-{}.pcap".format(now.year, now.month, now.day, now.hour, now.minute, now.second)
-    cap = pyshark.LiveCapture(output_file=output_file, interface="WiFi")
+    cap = pyshark.LiveCapture(output_file=output_file, interface=capture_interface)
     # threading.Thread(target=walk_local_ipv4, daemon=True).start()
-    t = threading.Thread(target=cap.sniff, kwargs={'timeout': 60})
-    threading.Thread(target=count_up_to, args={60}).start()
+    t = threading.Thread(target=cap.sniff, kwargs={'timeout': time})
+    threading.Thread(target=count_up_to, args={time}).start()
     t.start()
     ping("192.168.255.255")
     ping("10.255.255.255")
@@ -34,7 +37,6 @@ def count_up_to(n):
     print("Listening for {} seconds.".format(n))
     
 
-
 def send_arp(ip: str):
     print(sr1(Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=ip), timeout=3))
 
@@ -49,7 +51,7 @@ def get_first_tracert_hop(end: str="8.8.8.8") -> str:
         ips_ish = re.findall("\d+\.\d+\.\d+\.\d+",str(line))
         if ips_ish and end not in ips_ish:
             return ips_ish[0]
-    raise NotImplementedError()
+    raise NotImplementedError("Couldn't route to {}".format(end))
 
 def get_first_arp_entry_by_ip(ip) -> str:
     p = Popen(['arp', '-a', ip], stdout=PIPE)
@@ -78,11 +80,25 @@ def walk_local_ipv4():
 
 
 if __name__ == "__main__":
-    devices = Network.get_devices_from_pcap(pyshark.FileCapture(capture()))
+    parser = argparse.ArgumentParser(description="Captures traffic on a network interface for a given amount of time and then records all devices seen along with guesses for their names and operating systems in a database.")
+    parser.add_argument("--interface", "-i", default="WiFi", type=str, nargs='?', help='network interface to use (default: "WiFi")')
+    parser.add_argument("--time", "-t", default=60, type=int, nargs='?', help='time to spend listening in seconds (default: 60)')
+    parser.add_argument("--database", "--db", "-d", default="devices.db", type=str, nargs='?', help='database to store devices in (default: "devices.db")')
+    args = parser.parse_args()
+    output_file_name = capture(time=args.time, capture_interface=args.interface)
+    print("Pcap exported to {}".format(output_file_name))
+    devices = Network.get_devices_from_pcap(pyshark.FileCapture(output_file_name))
     router_mac, router_ip = get_router_addresses()
+    print("Router identified with IP: {} and MAC {}".format(router_ip, router_mac))
+    add_device_to_database(router_mac, 
+            device_db=args.database,
+            name=probe.probe_device_name(router_mac, router_ip), 
+            os_guess=probe.probe_ip_address(router_ip), 
+            is_router=1)
     device : Device
     for device in devices:
         add_device_to_database(device.MAC_ADDRESS, 
+            device_db=args.database,
             name=probe.probe_device_name(device.MAC_ADDRESS, device.ip_addresses[0]), 
             os_guess=probe.probe_ip_address(device.ip_addresses[0]), 
-            is_router=device.MAC_ADDRESS == router_mac)
+            is_router=int(device.MAC_ADDRESS == router_mac))
