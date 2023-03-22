@@ -25,6 +25,16 @@ def get_device_name(mac: str, device_db=DEFAULT_DB_NAME) -> str:
             return name[0][0]
         else:
             return mac
+
+
+def get_os_guess(mac: str, device_db=DEFAULT_DB_NAME) -> str:
+    with sqlite3.connect(device_db) as connection:
+        ensure_device_table_exists(connection)
+        # Look for the MAC address in the device database
+        os_guess = connection.execute("SELECT os, certainty FROM DEVICES WHERE mac = '{}';".format(mac)).fetchall()
+        # If it's in the database, return its name, else return its MAC
+        if os_guess != []:
+            return os_guess[0]
         
 
 def add_device_to_database(mac: str, device_db=DEFAULT_DB_NAME, name='', os_guess=['No Guess', -1], is_router=0):
@@ -38,7 +48,7 @@ def add_device_to_database(mac: str, device_db=DEFAULT_DB_NAME, name='', os_gues
             if name != "":
                 update += "name = '{}',".format(name)
             if os_guess != ['No Guess', -1]:
-                update += "os = '{}', certainty = '{}'".format(os_guess[0], os_guess[1])
+                update += "os = '{}', certainty = '{}',".format(os_guess[0], os_guess[1])
             update += "is_router = '{}'".format(is_router)
             #print("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
             connection.execute("UPDATE DEVICES SET " + update.rstrip(',') + " WHERE mac = '{}';".format(mac))
