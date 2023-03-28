@@ -4,3 +4,6 @@
 *.pcap
 *.db
 __pycache__/*
+.obsidian/*
+*.session.sql
+target/*
