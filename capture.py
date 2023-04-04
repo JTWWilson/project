@@ -9,7 +9,7 @@ from device_db_manager import add_device_to_database, get_device_name
 from analysis import Network
 import probe
 from device import Device
-import sys
+from utils import is_local_ip_address
 import argparse
 
 
@@ -43,14 +43,16 @@ def send_arp(ip: str):
 
 def get_first_tracert_hop(end: str="8.8.8.8") -> str:
     p = Popen(['tracert', '-h', '1', end], stdout=PIPE)
-    # Assuming that the router is one hop away
+    
+    last_hop = ""
     while True:
         line = p.stdout.readline()
         if not line:
             break
         ips_ish = re.findall("\d+\.\d+\.\d+\.\d+",str(line))
-        if ips_ish and end not in ips_ish:
-            return ips_ish[0]
+        if not is_local_ip_address(ips_ish[0]) and end not in ips_ish:
+            return last_hop
+        last_hop = ips_ish
     raise NotImplementedError("Couldn't route to {}".format(end))
 
 def get_first_arp_entry_by_ip(ip) -> str:
