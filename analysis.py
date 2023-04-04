@@ -51,7 +51,7 @@ class Network:
         
         filtered_devices = list(filter((lambda x: x in g.nodes), self.devices))
 
-        router_mac = None
+        router_mac = ""
         router_list = get_router_list()
         print(router_list)
         for device in filtered_devices:
@@ -65,8 +65,8 @@ class Network:
                     port_report = ""
                     for out_port, weight in device.devices_sent_to[out_mac].items():
                         total_packets += weight
-                        if out_port != -1:
-                            port_report += "Port {}: {}pkts, ".format(out_port, weight)
+                        #if out_port != -1:
+                        #    port_report += "Port {}: {}pkts, ".format(out_port, weight)
                     if (router_mac in out_mac or router_mac in device.MAC_ADDRESS) and out_mac != router_mac:
                         g.add_edge(device.MAC_ADDRESS, router_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)                        
                         g.add_edge(router_mac, out_mac, dst_ports=port_report.rstrip(", "), weight=total_packets)
@@ -108,17 +108,17 @@ class Network:
         router_list = get_router_list()
         for device in self.devices:
             if allow_router and device.MAC_ADDRESS in router_list:
-                g.add_node(device.MAC_ADDRESS, name=device.name, color="black", local_addr="Router", layer=2)
+                g.add_node(device.MAC_ADDRESS, name=device.name, color="black", local_addr="Router", layer=2, os_guess=device.os_guess.__repr__())
                 continue
             if is_reserved_mac_address(device.MAC_ADDRESS)[0]:
                 if allow_multicast:
-                    g.add_node(device.MAC_ADDRESS, name=device.name, color="green", local_addr="Multicast", layer=4)
+                    g.add_node(device.MAC_ADDRESS, name=device.name, color="green", local_addr="Multicast", layer=4, os_guess=device.os_guess.__repr__())
             elif all([is_local_ip_address(ip) for ip in device.ip_addresses]):
                 if allow_local:
-                    g.add_node(device.MAC_ADDRESS, name=device.name, color="blue", local_addr="Local", layer=3)
+                    g.add_node(device.MAC_ADDRESS, name=device.name, color="blue", local_addr="Local", layer=3, os_guess=device.os_guess.__repr__())
             elif all([not is_local_ip_address(ip) for ip in device.ip_addresses]):
                 if allow_external:
-                    g.add_node(device.MAC_ADDRESS, name=device.name, color="red", local_addr="External", layer=1)
+                    g.add_node(device.MAC_ADDRESS, name=device.name, color="red", local_addr="External", layer=1, os_guess=device.os_guess.__repr__())
         return g
 
     def plot_connections(self, layout):
@@ -234,7 +234,7 @@ class Network:
 
         label_pos = {}
         for node, (x,y) in pos.items():
-            label_pos[node] = (x, y-0.05)
+            label_pos[node] = (x, y-0.08)
 
         normalised_widths = self.normalise_widths(nx.get_edge_attributes(g,'weight'))
 
