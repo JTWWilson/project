@@ -42,17 +42,22 @@ def send_arp(ip: str):
 
 
 def get_first_tracert_hop(end: str="8.8.8.8") -> str:
-    p = Popen(['tracert', '-h', '1', end], stdout=PIPE)
+    p = Popen(['tracert', end], stdout=PIPE)
     
-    last_hop = ""
+    previous_hop = "-"
     while True:
         line = p.stdout.readline()
         if not line:
             break
         ips_ish = re.findall("\d+\.\d+\.\d+\.\d+",str(line))
-        if not is_local_ip_address(ips_ish[0]) and end not in ips_ish:
-            return last_hop
-        last_hop = ips_ish
+        if not ips_ish or end in ips_ish:
+            continue
+        if previous_hop == "-":
+            previous_hop = ips_ish[0]
+            continue
+        if not ips_ish[0].startswith(previous_hop.split(".")[0]) and end not in ips_ish:
+            return previous_hop
+        previous_hop = ips_ish[0]
     raise NotImplementedError("Couldn't route to {}".format(end))
 
 def get_first_arp_entry_by_ip(ip) -> str:
