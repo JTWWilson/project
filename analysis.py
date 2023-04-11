@@ -345,7 +345,7 @@ def get_all_addresses(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Analyses and represents a packet capture using the provided database of devices.")
-    parser.add_argument("--pcap", "-p", type=str, nargs=1, required=True, help='path to a packet capture to analyse.')
+    parser.add_argument("--pcap", "-p", type=str, required=True, help='path to a packet capture to analyse.')
     parser.add_argument("--database", "--db", "-d", default="devices.db", type=str, nargs='?', help='database to take device information from (default: "devices.db")')
     args = parser.parse_args()
     pcap = pyshark.FileCapture(args.pcap)
