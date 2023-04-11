@@ -54,7 +54,7 @@ class Network:
 
         router_mac = ""
         router_list = get_router_list()
-        print(router_list)
+
         for device in filtered_devices:
             if device in router_list:
                 router_mac = device.MAC_ADDRESS
