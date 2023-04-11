@@ -43,8 +43,7 @@ def get_manufacturer_from_mac(mac: str) -> str:
     try:
         response = requests.get("https://api.maclookup.app/v2/macs/{}?apiKey={}".format(mac, config['maclookup_api_key']))
     except KeyError:
-        print('Attempted MAC address lookup but has no API key')
-        return ""
+        response = requests.get("https://api.maclookup.app/v2/macs/{}".format(mac))
     if response.status_code == 200:
         return loads(response.text)["company"]
     else:
