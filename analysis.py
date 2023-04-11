@@ -1,3 +1,4 @@
+import argparse
 import pyshark
 import typing
 from typing_extensions import Literal
@@ -343,11 +344,11 @@ def get_all_addresses(
 
 
 if __name__ == '__main__':
-    if len(sys.argv) == 2:
-        pcap_path = sys.argv[1]
-    else:
-        quit("No path to a pcap was given.")
-    pcap = pyshark.FileCapture(pcap_path)
+    parser = argparse.ArgumentParser(description="Analyses and represents a packet capture using the provided database of devices.")
+    parser.add_argument("--pcap", "-p", type=str, nargs=1, required=True, help='path to a packet capture to analyse.')
+    parser.add_argument("--database", "--db", "-d", default="devices.db", type=str, nargs='?', help='database to take device information from (default: "devices.db")')
+    args = parser.parse_args()
+    pcap = pyshark.FileCapture(args.pcap)
     net = Network(Network.get_devices_from_pcap(pcap))
     net.plot_connections("multipartite")
     """
