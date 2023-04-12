@@ -180,7 +180,7 @@ class Network:
             node_index = sel.index
             node_name = list(g.nodes)[node_index]
             node_attr = g.nodes[node_name]
-            text = node_name + '\n' + '\n'.join(f'{k}: {v}' for k, v in node_attr.items())
+            text = 'MAC Address: ' + node_name + '\n' + 'Name: ' + node_attr['name'] + '\n' + 'Type: ' + node_attr['local_addr'] + '\n' + 'OS Estimate: ' + node_attr['os_guess']
             sel.annotation: Annotation
             sel.annotation.set_text(text)
         
